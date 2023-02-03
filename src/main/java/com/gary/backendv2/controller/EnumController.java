@@ -1,6 +1,7 @@
 package com.gary.backendv2.controller;
 
 import com.gary.backendv2.model.enums.*;
+import com.gary.backendv2.model.inventory.ItemContainer;
 import com.gary.backendv2.utils.EnumUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,4 +58,16 @@ public class EnumController {
   
 	@GetMapping("/tutorial_type")
 	public List<String> getTutorialType() {return EnumUtils.getEnumValues(TutorialType.class);}
+
+	@GetMapping("/item_unit_types")
+	public List<String> getUnitTypes() {return EnumUtils.getEnumValues(ItemContainer.Unit.class);}
+
+	@GetMapping("/employee_types")
+	public List<String> getEmployeeTypes() {return EnumUtils.getEnumValues(EmployeeType.class);}
+
+	@GetMapping("/victim_statuses")
+	public List<String> getVictimsStatuses() {return EnumUtils.getEnumValues(VictimStatus.class);}
+	@GetMapping("/genders")
+	public List<String> getGenders() {return EnumUtils.getEnumValues(Gender.class);}
+
 }

@@ -2,19 +2,20 @@ package com.gary.backendv2.service;
 
 import com.gary.backendv2.exception.HttpException;
 import com.gary.backendv2.model.ambulance.Ambulance;
-import com.gary.backendv2.model.dto.request.users.RegisterEmployeeRequest;
 import com.gary.backendv2.model.dto.request.users.UpdateWorkScheduleRequest;
 import com.gary.backendv2.model.dto.response.AmbulanceResponse;
+import com.gary.backendv2.model.dto.response.IncidentResponse;
 import com.gary.backendv2.model.dto.response.WorkScheduleResponse;
-import com.gary.backendv2.model.dto.response.users.GenericEmployeeResponse;
+import com.gary.backendv2.model.dto.response.users.DispatcherResponse;
+import com.gary.backendv2.model.dto.response.users.GenericUserResponse;
 import com.gary.backendv2.model.dto.response.users.MedicResponse;
 import com.gary.backendv2.model.enums.EmployeeType;
+import com.gary.backendv2.model.enums.RoleName;
+import com.gary.backendv2.model.incident.Incident;
+import com.gary.backendv2.model.users.AdminUser;
 import com.gary.backendv2.model.users.employees.*;
 import com.gary.backendv2.model.users.User;
-import com.gary.backendv2.repository.AmbulanceRepository;
-import com.gary.backendv2.repository.EmployeeShiftRepository;
-import com.gary.backendv2.repository.MedicRepository;
-import com.gary.backendv2.repository.UserRepository;
+import com.gary.backendv2.repository.*;
 import com.gary.backendv2.security.service.AuthService;
 import com.gary.backendv2.utils.Utils;
 import lombok.RequiredArgsConstructor;
@@ -27,9 +28,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -40,45 +40,54 @@ public class EmployeeService {
 
     private final AmbulanceRepository ambulanceRepository;
     private final AuthService authService;
+    private final IncidentRepository incidentRepository;
+    private final DispatcherRepository dispatcherRepository;
 
     public void startShift(Authentication authentication) {
         User currentUser = authService.getLoggedUserFromAuthentication(authentication);
 
         if (currentUser instanceof AbstractEmployee e) {
-            List<EmployeeShift> allShifts = e.getShifts();
-            if (allShifts.size() > 0) {
-                EmployeeShift mostRecentShift = allShifts.get(allShifts.size() - 1);
-
-                if (
-                        (mostRecentShift.getActualStartTime() != null) &&
-                        (mostRecentShift.getActualStartTime().getDayOfMonth() == LocalDate.now().getDayOfMonth()) &&
-                        (mostRecentShift.getActualStartTime().getMonthValue() == LocalDate.now().getMonthValue()) &&
-                        (mostRecentShift.getActualStartTime().getDayOfWeek() == LocalDate.now().getDayOfWeek())
-                )
-                    throw new HttpException(
-                            HttpStatus.BAD_REQUEST,
-                            String.format("You've already started a shift for: %s %s", LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue()));
-            }
-
-            EmployeeShift newShift = startNewShift(e);
-
-            allShifts.add(newShift);
-            e.setShifts(allShifts);
-
-            userRepository.save(e);
-
+            startShift(e);
         }
         else throw new HttpException(HttpStatus.FORBIDDEN, "Logged user seems not to be an Employee");
+    }
+
+    public void startShift(AbstractEmployee employee) {
+        List<EmployeeShift> allShifts = employee.getShifts();
+//        if (allShifts.size() > 0) {
+//            EmployeeShift mostRecentShift = allShifts.get(allShifts.size() - 1);
+//
+//            if (
+//                    (mostRecentShift.getActualStartTime() != null) &&
+//                            (mostRecentShift.getActualStartTime().getDayOfMonth() == LocalDate.now().getDayOfMonth()) &&
+//                            (mostRecentShift.getActualStartTime().getMonthValue() == LocalDate.now().getMonthValue()) &&
+//                            (mostRecentShift.getActualStartTime().getDayOfWeek() == LocalDate.now().getDayOfWeek())
+//            )
+//                throw new HttpException(
+//                        HttpStatus.BAD_REQUEST,
+//                        String.format("You've already started a shift for: %s %s", LocalDate.now().getDayOfMonth(), LocalDate.now().getMonth().toString()));
+//        }
+
+        EmployeeShift newShift = startNewShift(employee);
+
+        allShifts.add(newShift);
+        employee.setShifts(allShifts);
+
+        userRepository.save(employee);
     }
 
     public void endShift(Authentication authentication) {
         User currentUser = authService.getLoggedUserFromAuthentication(authentication);
         if (currentUser instanceof AbstractEmployee e) {
-            EmployeeShift currentShift = e.getCurrentShift();
-            currentShift.setActualEndTime(LocalDateTime.now());
-
-            employeeShiftRepository.save(currentShift);
+           endShift(e);
         }
+    }
+
+    public void endShift(AbstractEmployee employee) {
+        EmployeeShift currentShift = employee.getCurrentShift();
+        currentShift.setActualEndTime(LocalDateTime.now());
+
+        employeeShiftRepository.save(currentShift);
     }
 
     public WorkScheduleResponse updateWorkSchedule(UpdateWorkScheduleRequest workSchedule, Authentication authentication) {
@@ -91,7 +100,7 @@ public class EmployeeService {
 
             employee = userRepository.save(employee);
 
-            return getWorkScheduleResponse(employee);
+            return Utils.createWorkScheduleResponse(employee);
         }
 
         throw new HttpException(HttpStatus.I_AM_A_TEAPOT);
@@ -100,25 +109,44 @@ public class EmployeeService {
 
     public WorkScheduleResponse getSchedule(Authentication authentication) {
         User currentUser = authService.getLoggedUserFromAuthentication(authentication);
+
         if (currentUser instanceof AbstractEmployee employee) {
-            return getWorkScheduleResponse(employee);
+            if (currentUser.getRoles().stream().anyMatch(x -> x.getName().equals(RoleName.ADMIN.getPrefixedName()))) {
+                throw new HttpException(HttpStatus.NO_CONTENT, "Admin doesnt have a schedule");
+            }
+
+
+            return Utils.createWorkScheduleResponse(employee);
         }
 
         throw new HttpException(HttpStatus.I_AM_A_TEAPOT);
     }
 
-    public List<GenericEmployeeResponse> getAllSchedules() {
-        List<GenericEmployeeResponse> responses = new ArrayList<>();
+    public Boolean amIWorking(Authentication authentication) {
+        User user = authService.getLoggedUserFromAuthentication(authentication);
+        if (user instanceof AbstractEmployee employee) {
+            return employee.getWorking();
+        }
+
+        throw new HttpException(HttpStatus.I_AM_A_TEAPOT);
+    }
+
+    public List<GenericUserResponse> getAllSchedules() {
+        List<GenericUserResponse> responses = new ArrayList<>();
 
         List<AbstractEmployee> employees = userRepository.findAllEmployees();
         for (AbstractEmployee e : employees) {
-            GenericEmployeeResponse response = new GenericEmployeeResponse();
+            GenericUserResponse response = new GenericUserResponse();
+
+            if (e instanceof AdminUser) {
+                continue;
+            }
 
             response.setEmail(e.getEmail());
             response.setId(e.getUserId());
             response.setName(e.getFirstName());
             response.setLastName(e.getLastName());
-            response.setWorkSchedule(getWorkScheduleResponse(e));
+            response.setWorkSchedule(Utils.createWorkScheduleResponse(e));
 
             if (e instanceof Dispatcher d) {
                 response.setEmployeeType(EmployeeType.DISPATCHER);
@@ -149,9 +177,9 @@ public class EmployeeService {
         }
     }
 
-    public List<MedicResponse> getAllMedics(){
+    public List<MedicResponse> getAllMedics() {
         List<MedicResponse> medicResponses = new ArrayList<>();
-        for(Medic m : medicRepository.findAll()){
+        for(Medic m : medicRepository.findAll()) {
             medicResponses.add(
                   MedicResponse
                           .builder()
@@ -165,25 +193,80 @@ public class EmployeeService {
         return medicResponses;
     }
 
-    private WorkScheduleResponse getWorkScheduleResponse(AbstractEmployee employee) {
-        WorkSchedule newSchedule = employee.getWorkSchedule();
-        MappedSchedule mappedSchedule = newSchedule.getMappedSchedule();
+    public List<DispatcherResponse> getAllDispatchers() {
+        List<DispatcherResponse> responses = new ArrayList<>();
+        for (Dispatcher d : dispatcherRepository.findAll()) {
+            DispatcherResponse response = new DispatcherResponse();
+            response.setFirstName(d.getFirstName());
+            response.setLastName(d.getLastName());
+            response.setUserId(d.getUserId());
+            response.setEmail(d.getEmail());
 
-        WorkScheduleResponse response = new WorkScheduleResponse();
+            Set<IncidentResponse> incidentResponses = d.getIncidents().stream().map(IncidentResponse::new).collect(Collectors.toSet());
 
-        for (var kv : mappedSchedule.getTimeTable().entrySet()) {
-            response.getSchedule().put(
-                    String.valueOf(kv.getKey()),
-                    new RegisterEmployeeRequest.ScheduleDto(
-                            mappedSchedule.getWorkingHours(kv.getKey()).getLeft().toString(),
-                            mappedSchedule.getWorkingHours(kv.getKey()).getRight().toString()));
+            response.getAssignedIncidents().addAll(incidentResponses);
+
+            responses.add(response);
         }
-        return response;
+
+        return responses;
+    }
+
+    private final AmbulanceManagerRepository ambulanceManagerRepository;
+    public List<GenericUserResponse> getAllAmbulanceManagers() {
+        List<GenericUserResponse> responses = new ArrayList<>();
+
+        for (AmbulanceManager m : ambulanceManagerRepository.findAll()) {
+            GenericUserResponse userResponse = new GenericUserResponse();
+            userResponse.setEmployeeType(EmployeeType.AMBULANCE_MANAGER);
+            userResponse.setName(m.getFirstName());
+            userResponse.setLastName(m.getLastName());
+            userResponse.setEmail(m.getEmail());
+
+            responses.add(userResponse);
+        }
+
+        return responses;
+    }
+
+    public List<MedicResponse> getFreeMedics() {
+        List<Medic> allMedics = medicRepository.findAll();
+        List<Ambulance> allAmbulances = ambulanceRepository.findAll();
+
+        Set<Medic> assigendMedics = new HashSet<>();
+        for (Ambulance ambulance : allAmbulances) {
+           for (Medic assigend :  ambulance.getCrew().getMedics()) {
+               if (allMedics.contains(assigend)) {
+                   assigendMedics.add(assigend);
+               }
+           }
+        }
+
+        Set<Medic> freeMedics = new HashSet<>(allMedics);
+        freeMedics.removeAll(assigendMedics);
+        List<MedicResponse> medicResponses = new ArrayList<>();
+        for (Medic m : freeMedics) {
+            medicResponses.add(
+                    MedicResponse
+                            .builder()
+                            .email(m.getEmail())
+                            .firstName(m.getFirstName())
+                            .lastName(m.getLastName())
+                            .userId(m.getUserId())
+                            .build()
+            );
+        }
+
+        return medicResponses;
     }
 
     private EmployeeShift startNewShift(AbstractEmployee e) {
         MappedSchedule workSchedule = e.getWorkSchedule().getMappedSchedule();
         Pair<LocalTime, LocalTime> todaysWorkingHours = workSchedule.getWorkingHours(LocalDate.now().getDayOfWeek());
+        if (todaysWorkingHours == null) {
+            throw new HttpException(HttpStatus.NO_CONTENT, "Your work schedule doesn't have entry for " + LocalDate.now().getDayOfWeek());
+        }
+
         long shiftDuration = todaysWorkingHours.getLeft().until(todaysWorkingHours.getRight(), ChronoUnit.MINUTES);
 
         LocalTime currentTime = LocalTime.now();

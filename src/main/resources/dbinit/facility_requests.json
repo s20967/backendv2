@@ -1,0 +1,116 @@
+[
+  {
+    "longitude": 20.9737013051722,
+    "latitude": 52.21078875416914,
+    "name": "Komenda Rejonowa Policji Warszawa III",
+    "facilityType": "POLICE_STATION"
+  },
+  {
+    "longitude": 21.023054411324274,
+    "latitude": 52.194400636349286,
+    "name": "Komenda Rejonowa Policji Warszawa II",
+    "facilityType": "POLICE_STATION"
+  },
+  {
+    "longitude": 20.984889661502184,
+    "latitude": 52.209732145592824,
+    "name": "Uniwersyteckie Centrum Kliniczne Warszawskiego Uniwersytetu Medycznego",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 20.998036846965046,
+    "latitude": 52.22447893708424,
+    "name": "Szpital Kliniczny Dzieciątka Jezus",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 21.02157349935089,
+    "latitude": 52.214262495680316,
+    "name": "Komenda Miejska Państwowej Straży Pożarnej m. st. Warszaw",
+    "facilityType": "FIRE_UNIT"
+  },
+  {
+    "longitude": 20.999018997309374,
+    "latitude": 52.293086458021826,
+    "name": "Jednostka Ratowniczo-Gaśnicza nr 1 Grupa Ratownictwa Wodno-Nurkowego",
+    "facilityType": "FIRE_UNIT"
+  },
+  {
+    "longitude": 21.011011104957504,
+    "latitude": 52.23058626723757,
+    "name": "Metro Centrum",
+    "facilityType": "AED"
+  },
+  {
+    "longitude": 21.00898116660908,
+    "latitude": 52.23495734296105,
+    "name": "Metro Świętokrzyska",
+    "facilityType": "AED"
+  },
+  {
+    "longitude": 20.998160433761846,
+    "latitude": 52.23308107957378,
+    "name": "Metro Rondo ONZ",
+    "facilityType": "AED"
+  },
+  {
+    "longitude": 20.983390392158494,
+    "latitude": 52.23027820658026,
+    "name": "Metro Rondo Daszyńskiego",
+    "facilityType": "AED"
+  },
+  {
+    "longitude": 21.01448000401366,
+    "latitude": 52.217651202360564,
+    "name": "Metro Politechnika",
+    "facilityType": "AED"
+  },
+  {
+    "longitude": 21.007376667805577,
+    "latitude": 52.20943725923443,
+    "name": "Metro Pole Mokotowskie",
+    "facilityType": "AED"
+  },
+  {
+    "longitude": 16.935900,
+    "latitude": 52.403260,
+    "name": "Uniwersytecki Szpital",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 20.951870,
+    "latitude": 52.286369,
+    "name": "Szpital Bielański",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 21.037500,
+    "latitude": 52.204950,
+    "name": "Szpital Czerniakowski",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 21.000561,
+    "latitude": 52.198872,
+    "name": "Szpital Czerniakowski",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 20.971920,
+    "latitude": 52.234460,
+    "name": "Wojewódzki Szpital Zakaźny w Warszawie",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 20.971920,
+    "latitude": 52.234460,
+    "name": "Szpital Specjalistyczny \"Inflancka\" im. Krysi Niżyńskiej",
+    "facilityType": "HOSPITAL"
+  },
+  {
+    "longitude": 21.010359648559962,
+    "latitude": 52.23088799414715,
+    "name": "Komisariat Policji Metra Warszawskiego",
+    "facilityType": "POLICE_STATION"
+  }
+]

@@ -24,9 +24,9 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class BackupService {
-	private BackupRepository backupRepository;
-	private UserRepository userRepository;
-	private IncidentRepository incidentRepository;
+	private final BackupRepository backupRepository;
+	private final UserRepository userRepository;
+	private final IncidentRepository incidentRepository;
 
 	public void add(BackupAddRequest backupAddRequest){
 		Optional<User> userOptional = userRepository.findByEmail(backupAddRequest.getRequester());
@@ -56,6 +56,7 @@ public class BackupService {
 		return BackupResponse
 				.builder()
 				.backupId(backup.getBackupId())
+				.incidentId(backup.getIncident().getIncidentId())
 				.backupType(backup.getBackupType())
 				.accepted(backup.getAccepted())
 				.justification(backup.getJustification())
@@ -65,11 +66,12 @@ public class BackupService {
 
 	public List<BackupResponse> getAll(){
 		List<BackupResponse> backupResponses = new ArrayList<>();
-		for(Backup backup:backupRepository.findAll()){
+		for(Backup backup : backupRepository.findAll()){
 			backupResponses.add(
 					BackupResponse
 							.builder()
 							.time(backup.getTime())
+							.incidentId(backup.getIncident().getIncidentId())
 							.justification(backup.getJustification())
 							.accepted(backup.getAccepted())
 							.backupType(backup.getBackupType())

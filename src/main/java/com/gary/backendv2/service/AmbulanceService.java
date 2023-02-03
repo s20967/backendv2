@@ -12,26 +12,36 @@ import com.gary.backendv2.model.dto.response.*;
 import com.gary.backendv2.model.dto.response.items.AbstractItemResponse;
 import com.gary.backendv2.model.dto.response.users.MedicResponse;
 import com.gary.backendv2.model.enums.AmbulanceStateType;
+import com.gary.backendv2.model.enums.IncidentStatusType;
+import com.gary.backendv2.model.incident.Incident;
 import com.gary.backendv2.model.inventory.Inventory;
 import com.gary.backendv2.model.inventory.ItemContainer;
 import com.gary.backendv2.model.inventory.items.Item;
+import com.gary.backendv2.model.users.User;
 import com.gary.backendv2.model.users.employees.Medic;
 import com.gary.backendv2.repository.*;
 import com.gary.backendv2.utils.ItemUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.relational.core.sql.In;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AmbulanceService {
+    private final EmployeeShiftRepository employeeShiftRepository;
+    private final IncidentRepository incidentRepository;
     private final ItemService itemService;
 
     private final AmbulanceRepository ambulanceRepository;
@@ -43,6 +53,7 @@ public class AmbulanceService {
     private final InventoryRepository inventoryRepository;
     private final CrewRepository crewRepository;
     private final MedicRepository medicRepository;
+    private final AmbulanceIncidentHistoryRepository incidentHistoryRepository;
 
     public List<AmbulanceResponse> getAllAmbulances() {
         List<Ambulance> all = ambulanceRepository.findAll();
@@ -85,6 +96,69 @@ public class AmbulanceService {
         return ambulanceStateResponse;
     }
 
+    public Map<IncidentStatusType, List<IncidentResponse>> getAllIncidents(String licensePlate) {
+        Map<IncidentStatusType, List<IncidentResponse>> responseMap = new HashMap<>() {{
+            put(IncidentStatusType.NEW, new ArrayList<>());
+            put(IncidentStatusType.CLOSED, new ArrayList<>());
+            put(IncidentStatusType.ASSIGNED, new ArrayList<>());
+            put(IncidentStatusType.ACCEPTED, new ArrayList<>());
+            put(IncidentStatusType.REJECTED, new ArrayList<>());
+        }};
+
+        Ambulance ambulance = getAmbulance(licensePlate);
+
+        AmbulanceIncidentHistory incidentHistory = ambulance.getIncidentHistory();
+        for (var elem : incidentHistory.getIncidents()) {
+            Incident incident = elem.getIncident();
+            IncidentResponse response = IncidentResponse
+                    .builder()
+                    .incidentId(incident.getIncidentId())
+                    .accidentReport(IncidentReportResponse.of(incident.getIncidentReport()))
+                    .dangerScale(incident.getDangerScale())
+                    .incidentStatusType(incident.getIncidentStatusType())
+                    .reactionJustification(incident.getReactionJustification())
+                    .build();
+
+            responseMap.get(incident.getIncidentStatusType()).add(response);
+        }
+
+        return responseMap;
+    }
+
+    public IncidentResponse getCurrentIncident(String licensePlate) {
+        Incident incident = getCurrentIncidentEntity(licensePlate);
+
+        if (incident == null || incident.getIncidentStatusType() == IncidentStatusType.CLOSED) {
+            throw new HttpException(HttpStatus.NO_CONTENT, "This ambulance is not assigned to any incidents");
+        }
+
+        return IncidentResponse
+                .builder()
+                .incidentId(incident.getIncidentId())
+                .accidentReport(IncidentReportResponse.of(incident.getIncidentReport()))
+                .dangerScale(incident.getDangerScale())
+                .incidentStatusType(incident.getIncidentStatusType())
+                .reactionJustification(incident.getReactionJustification())
+                .build();
+    }
+
+    private Incident getCurrentIncidentEntity(String licensePlate) {
+        List<Incident> incidents = incidentRepository.findAll();
+        List<Incident> incidentCandidates = new ArrayList<>();
+
+        for (Incident incident : incidents) {
+            Optional<Ambulance> ambulanceOptional = incident.getAmbulances().stream().filter(x -> x.getLicensePlate().equals(licensePlate)).findFirst();
+            if (ambulanceOptional.isEmpty()) {
+                continue;
+            }
+
+            incidentCandidates.add(incident);
+        }
+        Optional<Incident> incidentOptional = incidentCandidates.stream().max(Comparator.comparing(Incident::getCreatedAt));
+
+        return incidentOptional.orElse(null);
+    }
+
     public List<MedicResponse> getCrewMedics(String licensePlate) {
         Ambulance ambulance = getAmbulance(licensePlate);
 
@@ -92,7 +166,7 @@ public class AmbulanceService {
         if (crew == null) {
             return Collections.emptyList();
         }
-        Set<Medic> medics = crew.getMedics();
+        List<Medic> medics = crew.getMedics();
 
         List<MedicResponse> medicResponses = new ArrayList<>();
         medics.forEach(x -> {
@@ -108,7 +182,7 @@ public class AmbulanceService {
         return medicResponses;
     }
 
-    public void removeMedics(String licensePlate, List<Integer> medicIds){
+    public void removeMedics(String licensePlate, List<Integer> medicIds) {
         Ambulance ambulance = getAmbulance(licensePlate);
 
         List<Medic> medics = medicRepository.getAllByUserIdIn(medicIds);
@@ -132,6 +206,7 @@ public class AmbulanceService {
     public void assignMedics(String licensePlate, List<Integer> medicIds) {
         Ambulance ambulance = getAmbulance(licensePlate);
 
+        log.info("Medic ids passed {}", medicIds);
         List<Medic> medics = medicRepository.getAllByUserIdIn(medicIds);
         if (medics.isEmpty()) {
             throw new HttpException(HttpStatus.BAD_REQUEST, String.format(", User with ids of: %s are not medics", medicIds));
@@ -201,20 +276,41 @@ public class AmbulanceService {
     public void deleteAmbulance(String licensePlate) {
         Ambulance ambulance = getAmbulance(licensePlate);
 
+        if (!ambulance.getCrew().getMedics().isEmpty()) {
+            removeMedics(licensePlate, ambulance.getCrew().getMedics().stream().map(User::getUserId).collect(Collectors.toList()));
+        }
+
+        try {
+            List<AmbulanceLocation> l = ambulanceLocationRepository.getAmbulanceLocationByAmbulance_LicensePlate(ambulance.getLicensePlate());
+            ambulanceLocationRepository.deleteAll(l);
+        }catch (RuntimeException e) {
+            e.printStackTrace();
+        }
+
         ambulanceRepository.delete(ambulance);
     }
 
     public void addGeoLocation(String licensePlate, PostAmbulanceLocationRequest newLocation) {
         Ambulance ambulance = getAmbulance(licensePlate);
+        Incident incident = getCurrentIncidentEntity(licensePlate);
+        if (incident == null) {
+            return;
+        }
 
 
         if (ambulance.getCurrentState().getStateType() == AmbulanceStateType.ON_ACTION) {
-            AmbulanceLocation ambulanceLocation = new AmbulanceLocation();
-            ambulanceLocation.setAmbulance(ambulance);
-            ambulanceLocation.setLocation(Location.of(newLocation.getLongitude(), newLocation.getLatitude()));
-            ambulanceLocation.setTimestamp(LocalDateTime.now());
+            EnumSet<IncidentStatusType> allowedIncidentStatuses = EnumSet.of(IncidentStatusType.ASSIGNED, IncidentStatusType.ACCEPTED, IncidentStatusType.NEW);
+            if (allowedIncidentStatuses.contains(incident.getIncidentStatusType())) {
+                AmbulanceLocation ambulanceLocation = new AmbulanceLocation();
+                ambulanceLocation.setAmbulance(ambulance);
+                ambulanceLocation.setLocation(Location.of(newLocation.getLatitude(), newLocation.getLongitude()));
+                ambulanceLocation.setTimestamp(LocalDateTime.now());
+                ambulanceLocation.setIncident(incident.getIncidentId());
 
-            ambulanceLocationRepository.save(ambulanceLocation);
+                ambulance.setLocation(Location.of(newLocation.getLatitude(), newLocation.getLongitude()));
+
+                ambulanceLocationRepository.save(ambulanceLocation);
+            }
         }
     }
 
@@ -267,6 +363,15 @@ public class AmbulanceService {
         }
 
         itemContainerRepository.save(container);
+        inventoryRepository.save(inventory);
+    }
+
+    public void editItemUnit(String licensePlate, Integer itemId, ItemContainer.Unit unit) {
+        Ambulance ambulance = getAmbulance(licensePlate);
+
+        Inventory inventory = ambulance.getInventory();
+        inventory.getItems().get(itemId).setUnit(unit);
+
         inventoryRepository.save(inventory);
     }
 
@@ -354,6 +459,19 @@ public class AmbulanceService {
         return new AmbulancePathResponse(pathElements);
     }
 
+    public AmbulancePathResponse getAmbulancePath(String licencePlate, Integer incidentId) {
+        Ambulance ambulance = getAmbulance(licencePlate);
+        List<AmbulanceLocation> ambulanceLocations = ambulanceLocationRepository.getAmbulanceLocationHistoryInIncident(ambulance.getAmbulanceId(), incidentId);
+
+        List<PathElement> pathElements = new ArrayList<>();
+
+        for (AmbulanceLocation al : ambulanceLocations) {
+            pathElements.add(new PathElement(al.getTimestamp() ,al.getLocation().getLatitude(), al.getLocation().getLongitude()));
+        }
+
+        return new AmbulancePathResponse(pathElements, incidentId);
+    }
+
     private Set<AmbulanceStateResponse> populateStateResponseSet(Ambulance ambulance) {
         Set<AmbulanceStateResponse> responseSet = new HashSet<>();
 
@@ -370,11 +488,12 @@ public class AmbulanceService {
         return responseSet;
     }
 
-    private Ambulance createAmbulance(AddAmbulanceRequest addRequest) {
+    public Ambulance createAmbulance(AddAmbulanceRequest addRequest) {
         Inventory inventory = inventoryRepository.save(new Inventory());
 
 
         AmbulanceHistory ambulanceHistory = new AmbulanceHistory();
+        AmbulanceIncidentHistory incidentHistory = incidentHistoryRepository.save(new AmbulanceIncidentHistory());
 
         AmbulanceState ambulanceState = new AmbulanceState();
         ambulanceState.setStateType(AmbulanceStateType.AVAILABLE);
@@ -383,6 +502,8 @@ public class AmbulanceService {
 
         ambulanceHistory.getAmbulanceStates().add(ambulanceState);
         ambulanceHistory = ambulanceHistoryRepository.save(ambulanceHistory);
+
+        Crew crew = crewRepository.save(new Crew());
 
         Ambulance ambulance = new Ambulance();
         ambulance.setAmbulanceClass(addRequest.getAmbulanceClass());
@@ -394,6 +515,8 @@ public class AmbulanceService {
         ambulance.setCurrentState(ambulanceState);
         ambulance.setAmbulanceHistory(ambulanceHistory);
         ambulance.setInventory(inventory);
+        ambulance.setIncidentHistory(incidentHistory);
+        ambulance.setCrew(crew);
 
         return ambulance;
     }

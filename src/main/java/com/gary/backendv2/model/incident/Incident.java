@@ -1,14 +1,15 @@
 package com.gary.backendv2.model.incident;
 
 import com.gary.backendv2.model.Backup;
+import com.gary.backendv2.model.VictimInfo;
 import com.gary.backendv2.model.ambulance.Ambulance;
 import com.gary.backendv2.model.enums.IncidentStatusType;
 import com.gary.backendv2.model.users.employees.Dispatcher;
 import lombok.*;
 
 import javax.persistence.*;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.time.LocalDateTime;
+import java.util.*;
 
 @Getter
 @Setter
@@ -29,7 +30,12 @@ public class Incident {
 	@ManyToOne(fetch = FetchType.EAGER)
 	private Dispatcher dispatcher;
 	@ManyToMany(mappedBy = "incidents")
-	private Set<Ambulance> ambulances;
+	private Set<Ambulance> ambulances = new HashSet<>();
 	@OneToMany
-	private Set<Backup> backups;
+	private Set<Backup> backups = new HashSet<>();
+
+	@OneToMany
+	private List<VictimInfo> victims = new ArrayList<>();
+
+	private LocalDateTime createdAt;
 }
